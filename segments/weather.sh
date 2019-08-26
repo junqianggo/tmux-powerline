@@ -48,6 +48,7 @@ run_segment() {
 		*)
 			echo "Unknown weather provider [${$TMUX_POWERLINE_SEG_WEATHER_DATA_PROVIDER}]";
 			return 1
+			;;
 	esac
 	if [ -n "$weather" ]; then
 		echo "$weather"
@@ -67,7 +68,7 @@ __process_settings() {
 	if [ -z "$TMUX_POWERLINE_SEG_WEATHER_GREP" ]; then
 		export TMUX_POWERLINE_SEG_WEATHER_GREP="${TMUX_POWERLINE_SEG_WEATHER_GREP_DEFAULT}"
 	fi
-	if [ -z "$TMUX_POWERLINE_SEG_WEATHER_LOCATION" ]; then
+	if [ -n "$TMUX_POWERLINE_SEG_WEATHER_LOCATION" ]; then
 		echo "No weather location specified.";
 		exit 8
 	fi
@@ -90,7 +91,7 @@ __yahoo_weather() {
 	fi
 
 	if [ -z "$degree" ]; then
-		weather_data=$(curl --max-time 4 -s "https://query.yahooapis.com/v1/public/yql?format=xml&q=SELECT%20*%20FROM%20weather.forecast%20WHERE%20u=%27${TMUX_POWERLINE_SEG_WEATHER_UNIT}%27%20AND%20woeid%20=%20%27${TMUX_POWERLINE_SEG_WEATHER_LOCATION}%27")
+		weather_data=$(curl --max-time 4 -s "http://flash.weather.com.cn/wmaps/xml/guangzhou.xml")
 		if [ "$?" -eq "0" ]; then
 			error=$(echo "$weather_data" | grep "problem_cause\|DOCTYPE");
 			if [ -n "$error" ]; then
@@ -103,10 +104,10 @@ __yahoo_weather() {
 
 			# <yweather:units temperature="F" distance="mi" pressure="in" speed="mph"/>
 			unit=$(echo "$weather_data" | "$gnugrep" -Zo "<yweather:units [^<>]*/>" | sed 's/.*temperature="\([^"]*\)".*/\1/')
-			condition=$(echo "$weather_data" | "$gnugrep" -Zo "<yweather:condition [^<>]*/>")
+			condition=$(echo "$weather_data" | "$gnugrep" -Zo "centername=\"广州市\" [^<>]*/>")
 			# <yweather:condition  text="Clear"  code="31"  temp="66"  date="Mon, 01 Oct 2012 8:00 pm CST" />
-			degree=$(echo "$condition" | sed 's/.*temp="\([^"]*\)".*/\1/')
-			condition=$(echo "$condition" | sed 's/.*text="\([^"]*\)".*/\1/')
+			degree=$(echo "$condition" | sed 's/.*temNow="\([^"]*\)".*/\1/')
+			condition=$(echo "$condition" | sed 's/.*state1="\([^"]*\)".*/\1/')
 			# Pull the times for sunrise and sunset so we know when to change the day/night indicator
 			# <yweather:astronomy sunrise="6:56 am"   sunset="6:21 pm"/>
 			if shell_is_osx || shell_is_bsd; then
@@ -114,8 +115,8 @@ __yahoo_weather() {
 			else
 				date_arg='-d'
 			fi
-			sunrise=$(date ${date_arg}"$(echo "$weather_data" | "$gnugrep" "yweather:astronomy" | sed 's/^\(.*\)sunset.*/\1/' | sed 's/^.*sunrise="\(.*m\)".*/\1/')" +%H%M)
-			sunset=$(date ${date_arg}"$(echo "$weather_data" | "$gnugrep" "yweather:astronomy" | sed 's/^.*sunset="\(.*m\)".*/\1/')" +%H%M)
+	#		sunrise=$(date ${date_arg}"$(echo "$weather_data" | "$gnugrep" "yweather:astronomy" | sed 's/^\(.*\)sunset.*/\1/' | sed 's/^.*sunrise="\(.*m\)".*/\1/')" +%H%M)
+	#		sunset=$(date ${date_arg}"$(echo "$weather_data" | "$gnugrep" "yweather:astronomy" | sed 's/^.*sunset="\(.*m\)".*/\1/')" +%H%M)
 		elif [ -f "${tmp_file}" ]; then
 			__read_tmp_file
 		fi
@@ -125,62 +126,62 @@ __yahoo_weather() {
 		if [ "$TMUX_POWERLINE_SEG_WEATHER_UNIT" == "k" ]; then
 			degree=$(echo "${degree} + 273.15" | bc)
 		fi
-		condition_symbol=$(__get_condition_symbol "$condition" "$sunrise" "$sunset") 
+		condition_symbol=$(__get_condition_symbol "$condition") # "$sunrise" "$sunset") 
 		echo "${condition_symbol} ${degree}°$(echo "$TMUX_POWERLINE_SEG_WEATHER_UNIT" | tr '[:lower:]' '[:upper:]')" | tee "${tmp_file}"
 	fi
 }
 
 # Get symbol for condition. Available conditions: http://developer.yahoo.com/weather/#codes
 __get_condition_symbol() {
-	local condition=$(echo "$1" | tr '[:upper:]' '[:lower:]')
-	local sunrise="$2"
-	local sunset="$3"
+	local condition="$1"      #$(echo "$1" | tr '[:upper:]' '[:lower:]')
+#	local sunrise="$2"
+#	local sunset="$3"
 	case "$condition" in
-		"sunny" | "hot")
-			hourmin=$(date +%H%M)
-			if [ "$hourmin" -ge "$sunset" -o "$hourmin" -le "$sunrise" ]; then
-				#echo "☽"
-				echo "☾"
-			else
+		"0" | "hot")
+#			hourmin=$(date +%H%M)
+#			if [ "$hourmin" -ge "$sunset" -o "$hourmin" -le "$sunrise" ]; then
+#				#echo "☽"
+#				echo "☾"
+#			else
 				#echo "☀"
 				echo "☼"
-			fi
+#			fi
 			;;
-		"rain" | "mixed rain and snow" | "mixed rain and sleet" | "freezing drizzle" | "drizzle" | "light drizzle" | "freezing rain" | "showers" | "mixed rain and hail" | "scattered showers" | "isolated thundershowers" | "thundershowers" | "light rain with thunder" | "light rain" | "rain and snow")
-			#echo "☂"
-			echo "☔"
+		"3" | "5" | "7" | "8" | "9" | "21" | "22" | "rain and snow")
+			echo "☂"
+			#echo "☔"
 			;;
-		"snow" | "mixed snow and sleet" | "snow flurries" | "light snow showers" | "blowing snow" | "sleet" | "hail" | "heavy snow" | "scattered snow showers" | "snow showers" | "light snow" | "snow/windy" | "snow grains" | "snow/fog")
-			#echo "☃"
-			echo "❅"
+		"6" | "13" | "14" | "15" | "16" | "17" | "26" | "27" | "28" | "snow showers" | "light snow" | "snow/windy" | "snow grains" | "snow/fog")
+			echo "☃"
+			#echo "❅"
 			;;
-		"cloudy" | "mostly cloudy" | "partly cloudy" | "partly cloudy/windy")
+		"1" | "2" | "18" | "partly cloudy/windy")
 			echo "☁"
 			;;
-		"tornado" | "tropical storm" | "hurricane" | "severe thunderstorms" | "thunderstorms" | "isolated thunderstorms" | "scattered thunderstorms")
-			#echo "⚡"
+		"4" | "10" | "11" | "12" | "23" | "24" | "25" | "scattered thunderstorms")
+		#	echo "⚡"
 			echo "☈"
 			;;
-		"dust" | "foggy" | "fog" | "haze" | "smoky" | "blustery" | "mist")
+		"20" | "29" | "30" | "31" | "53" | "blustery" | "mist")
 			#echo "♨"
-			#echo "﹌"
-			echo "〰"
+			echo "﹌"
+			#echo "〰"
 			;;
-		"breezy")
+		"19")
 			#echo "🌬"
 			echo "🍃"
 			;;
-		"windy" | "fair/windy")
+		"55" | "fair/windy")
 			#echo "⚐"
 			echo "⚑"
 			;;
-		"clear" | "fair" | "cold")
-			hourmin=$(date +%H%M)
-			if [ "$hourmin" -ge "$sunset" -o "$hourmin" -le "$sunrise" ]; then
-				echo "☾"
-			else
+		"99" | "fair" | "cold")
+#			hourmin=$(date +%H%M)
+#			if [ "$hourmin" -ge "$sunset" -o "$hourmin" -le "$sunrise" ]; then
+#				echo "☾"
+#			else
 				echo "〇"
-			fi
+#			fi
 			;;
 		*)
 			echo "?"
