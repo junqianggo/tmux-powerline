@@ -93,6 +93,8 @@ Now edit your `~/.tmux.conf` to use the scripts:
 
 <!-- Close syntax enough. -->
 ```vim
+set -g status-bg black
+set -g status-fg white
 set-option -g status on
 set-option -g status-interval 2
 set-option -g status-justify "centre"
